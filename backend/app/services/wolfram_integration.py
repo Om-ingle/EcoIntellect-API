@@ -1,6 +1,7 @@
 import os
 import math
 import logging
+import socket
 import wolframalpha
 
 logger = logging.getLogger(__name__)
@@ -32,20 +33,23 @@ class WolframClient:
         Falls back to the EPA standard (21.77 kg / tree / year) when unavailable.
         """
         if self._client:
+            old_timeout = socket.getdefaulttimeout()
             try:
+                socket.setdefaulttimeout(3)  # Hard 3-second cap on Wolfram API
                 query = f"how many trees needed to absorb {carbon_kg} kg CO2 per year"
                 res = self._client.query(query)
                 # Wolfram returns a result pod; try to parse the first numeric answer
                 for pod in res.pods:
                     for sub in pod.subpods:
                         text = sub.get("plaintext", "") or ""
-                        # Look for a plain integer or decimal in the result
                         import re
                         nums = re.findall(r"\d+\.?\d*", text.replace(",", ""))
                         if nums:
                             return max(1, int(float(nums[0])))
             except Exception as e:
                 logger.warning(f"Wolfram query failed, using fallback: {e}")
+            finally:
+                socket.setdefaulttimeout(old_timeout)
 
         # Fallback: EPA standard — one tree absorbs ~21.77 kg CO₂/year
         return max(1, math.ceil(carbon_kg / 21.77))

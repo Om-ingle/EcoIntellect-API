@@ -42,7 +42,7 @@ class GreenPTClient:
                     f"{self.base_url}/emissions/factor", 
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={"category": category, "item": item},
-                    timeout=2.0
+                    timeout=0.5
                 )
                 
                 if response.status_code == 200:

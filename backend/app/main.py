@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import random
 
@@ -14,6 +15,7 @@ from app.models import (
 from app.services.emissions_calculator import EmissionsCalculator
 from app.services.greenpt_integration import GreenPTClient
 from app.services.wolfram_integration import WolframClient
+from app.database import get_db, OrderRecord
 
 # Load environment variables from .env
 load_dotenv()
@@ -79,7 +81,7 @@ def health_check():
     tags=["analysis"],
     summary="Analyse the environmental impact of a food delivery order",
 )
-async def analyze_order(request: OrderAnalysisRequest):
+async def analyze_order(request: OrderAnalysisRequest, db: Session = Depends(get_db)):
     """
     Returns carbon emissions, eco score, better alternatives,
     and a Wolfram|One-powered yearly projection.
@@ -116,6 +118,18 @@ async def analyze_order(request: OrderAnalysisRequest):
         env_context = EmissionsCalculator.get_environmental_context(
             yearly_proj["total_carbon_kg"]
         )
+
+        # ── Database Ledger Save ─────────────────────────────────────
+        db_order = OrderRecord(
+            user_id="user_demo", # In production, this comes from JWT
+            distance_km=request.distance_km,
+            transport_mode=transport_mode,
+            packaging_type=packaging_type,
+            carbon_emission_grams=total_emissions,
+            eco_score=eco_score
+        )
+        db.add(db_order)
+        db.commit()
 
         return OrderAnalysisResponse(
             carbon_emission_grams=total_emissions,
@@ -183,22 +197,31 @@ async def compare_alternatives(
     tags=["impact"],
     summary="Get a user's cumulative environmental impact and Eco Score",
 )
-async def get_user_impact(user_id: str, days: int = 365):
+async def get_user_impact(user_id: str, days: int = 365, db: Session = Depends(get_db)):
     """
     Returns gamified sustainability metrics for a given user.
 
-    In production this endpoint would query a real database; for the
-    hackathon demo it uses statistically representative mock data so the
-    architecture story is clear.
+    Fetches actual order history from SQLite database and aggregates the 
+    carbon ledger dynamically.
     """
     try:
-        total_orders         = random.randint(20, 100)
-        avg_carbon_per_order = random.randint(150, 350)
-
-        total_carbon_kg  = round((total_orders * avg_carbon_per_order) / 1000, 2)
-        eco_score        = random.randint(65, 92)
-        potential_carbon = total_orders * 500   # worst-case if all choices were bad
-        carbon_saved_kg  = round((potential_carbon - total_carbon_kg * 1000) / 1000, 2)
+        orders = db.query(OrderRecord).filter(OrderRecord.user_id == user_id).all()
+        total_orders = len(orders)
+        
+        if total_orders == 0:
+            avg_carbon_per_order = 0
+            eco_score = 0
+            total_carbon_kg = 0.0
+            carbon_saved_kg = 0.0
+        else:
+            total_emissions_g = sum(o.carbon_emission_grams for o in orders)
+            avg_carbon_per_order = total_emissions_g / total_orders
+            total_carbon_kg = round(total_emissions_g / 1000, 2)
+            
+            # Baseline benchmark: assume 500g is a "standard" unchecked order
+            potential_carbon = total_orders * 500   
+            carbon_saved_kg  = round((potential_carbon - total_emissions_g) / 1000, 2)
+            eco_score        = int(sum(o.eco_score for o in orders) / total_orders)
 
         # Wolfram-powered projection
         proj = wolfram.calculate_yearly_projection(

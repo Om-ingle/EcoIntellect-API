@@ -35,7 +35,7 @@ export default function EcoIntellectDashboard() {
       setAnalysis(data);
     } catch (error) {
       console.error('Error:', error);
-      alert('Failed to analyze order. Make sure backend is running on port 8000');
+      alert('Failed to analyze order. Make sure the Railway API is live and accessible.');
     } finally {
       setLoading(false);
     }

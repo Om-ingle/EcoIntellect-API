@@ -43,7 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -81,7 +81,7 @@ def health_check():
     tags=["analysis"],
     summary="Analyse the environmental impact of a food delivery order",
 )
-async def analyze_order(request: OrderAnalysisRequest, db: Session = Depends(get_db)):
+def analyze_order(request: OrderAnalysisRequest, db: Session = Depends(get_db)):
     """
     Returns carbon emissions, eco score, better alternatives,
     and a Wolfram|One-powered yearly projection.
@@ -150,7 +150,7 @@ async def analyze_order(request: OrderAnalysisRequest, db: Session = Depends(get
     tags=["analysis"],
     summary="Compare every transport × packaging combination for a given distance",
 )
-async def compare_alternatives(
+def compare_alternatives(
     distance_km: float,
     transport_mode: str = "car",
     packaging_type: str = "plastic",
@@ -197,7 +197,7 @@ async def compare_alternatives(
     tags=["impact"],
     summary="Get a user's cumulative environmental impact and Eco Score",
 )
-async def get_user_impact(user_id: str, days: int = 365, db: Session = Depends(get_db)):
+def get_user_impact(user_id: str, days: int = 365, db: Session = Depends(get_db)):
     """
     Returns gamified sustainability metrics for a given user.
 

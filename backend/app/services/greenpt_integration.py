@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Any
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +35,22 @@ class GreenPTClient:
         Returns CO2 equivalent in grams.
         """
         if self.api_key:
-            # TODO: Production Implementation
-            # Example: 
-            # response = requests.post(f"{self.base_url}/emissions/factor", 
-            #                          headers={"Authorization": f"Bearer {self.api_key}"},
-            #                          json={"category": category, "item": item})
-            # return response.json().get('co2_grams', 0)
-            logger.info(f"GreenPT API Key found. Would call API for {category}:{item}")
-            pass
+            logger.info(f"GreenPT API Key found. Attempting live network request for {category}:{item}")
+            try:
+                # Live production API call with timeout so the demo doesn't hang
+                response = requests.post(
+                    f"{self.base_url}/emissions/factor", 
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={"category": category, "item": item},
+                    timeout=2.0
+                )
+                
+                if response.status_code == 200:
+                    return response.json().get('co2_grams', 0)
+                else:
+                    logger.warning(f"GreenPT API returned {response.status_code}. Falling back to EPA baseline.")
+            except requests.RequestException as e:
+                logger.warning(f"GreenPT API network error: {e}. Gracefully falling back to baseline.")
             
         # Demo Mode Fallback
         if category == "transport":
